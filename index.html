@@ -240,38 +240,69 @@ function moveNoButton(e){
   noButton.style.transform = `translate(${x}px, ${y}px)`;
 }
 
-const COUNTAPI_NAMESPACE = 're-wedding-invite-2026';
-const COUNTAPI_KEY = 'yes-count';
+/* ---------- RSVP counter: saved as a .txt file in your GitHub repo ----------
+   SETUP STEPS (do this before publishing):
+   1. In your repo, create a file named "rsvp-count.txt" containing just: 0
+   2. Create a GitHub fine-grained personal access token:
+      github.com -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
+      - Repository access: "Only select repositories" -> pick THIS repo only
+      - Permissions: "Contents" -> Read and write. Nothing else.
+   3. Fill in the 4 values below.
+   ⚠️ This token will be visible to anyone who views this page's source. Because it's
+   scoped to only this one repo's contents, the worst a visitor could do is edit files
+   in this repo — they cannot touch your other repos or account. Rotate the token any
+   time from the same GitHub settings page if you're ever unsure.
+------------------------------------------------------------------------------- */
+const GITHUB_OWNER  = 'YOUR_GITHUB_USERNAME';
+const GITHUB_REPO   = 'YOUR_REPO_NAME';
+const GITHUB_PATH   = 'rsvp-count.txt';
+const GITHUB_BRANCH = 'main';
+const GITHUB_TOKEN  = 'PASTE_YOUR_FINE_GRAINED_TOKEN_HERE';
 
-async function getYesCount(){
+async function getYesCountFile(){
   try {
-    const res = await fetch(`https://api.countapi.xyz/get/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
-    if (!res.ok) throw new Error('count fetch failed');
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`, {
+      headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json' }
+    });
+    if (!res.ok) throw new Error('GitHub get failed: ' + res.status);
     const data = await res.json();
-    return data.value || 0;
+    const decoded = atob(data.content.replace(/\n/g, ''));
+    return { count: parseInt(decoded.trim(), 10) || 0, sha: data.sha };
   } catch (err) {
-    console.error('Count fetch error:', err);
+    console.error('GitHub get error:', err);
     return null;
   }
 }
 
-async function hitYesCount(){
+async function saveYesCountFile(newCount, sha){
   try {
-    const res = await fetch(`https://api.countapi.xyz/hit/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
-    if (!res.ok) throw new Error('count hit failed');
-    const data = await res.json();
-    return data.value || null;
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${GITHUB_TOKEN}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: `RSVP yes count: ${newCount}`,
+        content: btoa(String(newCount)),
+        sha: sha,
+        branch: GITHUB_BRANCH
+      })
+    });
+    if (!res.ok) throw new Error('GitHub save failed: ' + res.status);
+    return true;
   } catch (err) {
-    console.error('Count hit error:', err);
-    return null;
+    console.error('GitHub save error:', err);
+    return false;
   }
 }
 
 async function showLiveCount(){
   const el = document.getElementById('live-count');
-  const count = await getYesCount();
-  if (count) {
-    el.textContent = count === 1 ? '💌 1 person has said yes so far' : `💌 ${count} people have said yes so far`;
+  const result = await getYesCountFile();
+  if (result && result.count > 0) {
+    el.textContent = result.count === 1 ? '💌 1 person has said yes so far' : `💌 ${result.count} people have said yes so far`;
     el.style.opacity = '1';
   }
 }
@@ -282,9 +313,11 @@ async function celebrateYes(){
   reveal.classList.add('show');
 
   const countEl = document.getElementById('rsvp-count');
-  const newCount = await hitYesCount();
-  if (newCount) {
-    countEl.textContent = `You're guest #${newCount} to say yes! ✦`;
+  const current = await getYesCountFile();
+  if (current) {
+    const newCount = current.count + 1;
+    const saved = await saveYesCountFile(newCount, current.sha);
+    countEl.textContent = saved ? `You're guest #${newCount} to say yes! ✦` : 'More details to follow soon ✦';
   } else {
     countEl.textContent = 'More details to follow soon ✦';
   }
