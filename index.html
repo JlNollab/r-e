@@ -240,20 +240,20 @@ function moveNoButton(e){
   noButton.style.transform = `translate(${x}px, ${y}px)`;
 }
 
-/* ---------- RSVP counter: uses CountAPI (free, no login/token needed) ----------
-   Works immediately on GitHub Pages or any static host — nothing to configure,
-   nothing that can ever leak. The namespace/key below just needs to stay the
-   same every time so the count keeps accumulating in the same place.
+/* ---------- RSVP counter: uses a free keyless counter service ----------
+   The original countapi.xyz shut down, so this uses its community-run
+   replacement instead. Same idea: no login, no token, nothing to leak.
+   The key below just needs to stay unique and stay the same every time.
 ------------------------------------------------------------------------------- */
-const COUNTAPI_NAMESPACE = 'jlnollab-r-e-wedding';
-const COUNTAPI_KEY = 'yes-count';
+const COUNT_KEY = 'jlnollab-r-e-wedding-yes-count';
+const COUNT_BASE = 'https://countapi.mileshilliard.com/api/v1';
 
 async function getYesCount(){
   try {
-    const res = await fetch(`https://api.countapi.xyz/get/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
-    if (!res.ok) throw new Error('count fetch failed: ' + res.status);
+    const res = await fetch(`${COUNT_BASE}/get/${COUNT_KEY}`);
+    if (!res.ok) return 0;
     const data = await res.json();
-    return data.value || 0;
+    return parseInt(data.value, 10) || 0;
   } catch (err) {
     console.error('Count fetch error:', err);
     return null;
@@ -262,10 +262,10 @@ async function getYesCount(){
 
 async function hitYesCount(){
   try {
-    const res = await fetch(`https://api.countapi.xyz/hit/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
+    const res = await fetch(`${COUNT_BASE}/hit/${COUNT_KEY}`);
     if (!res.ok) throw new Error('count hit failed: ' + res.status);
     const data = await res.json();
-    return data.value || null;
+    return parseInt(data.value, 10) || null;
   } catch (err) {
     console.error('Count hit error:', err);
     return null;
