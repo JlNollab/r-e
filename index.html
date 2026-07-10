@@ -240,69 +240,43 @@ function moveNoButton(e){
   noButton.style.transform = `translate(${x}px, ${y}px)`;
 }
 
-/* ---------- RSVP counter: saved as a .txt file in your GitHub repo ----------
-   SETUP STEPS (do this before publishing):
-   1. In your repo, create a file named "rsvp-count.txt" containing just: 0
-   2. Create a GitHub fine-grained personal access token:
-      github.com -> Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens
-      - Repository access: "Only select repositories" -> pick THIS repo only
-      - Permissions: "Contents" -> Read and write. Nothing else.
-   3. Fill in the 4 values below.
-   ⚠️ This token will be visible to anyone who views this page's source. Because it's
-   scoped to only this one repo's contents, the worst a visitor could do is edit files
-   in this repo — they cannot touch your other repos or account. Rotate the token any
-   time from the same GitHub settings page if you're ever unsure.
+/* ---------- RSVP counter: uses CountAPI (free, no login/token needed) ----------
+   Works immediately on GitHub Pages or any static host — nothing to configure,
+   nothing that can ever leak. The namespace/key below just needs to stay the
+   same every time so the count keeps accumulating in the same place.
 ------------------------------------------------------------------------------- */
-const GITHUB_OWNER  = 'jlnollab';
-const GITHUB_REPO   = 'r-e';
-const GITHUB_PATH   = 'rsvp-count.txt';
-const GITHUB_BRANCH = 'main';
-const GITHUB_TOKEN  = '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';
+const COUNTAPI_NAMESPACE = 'jlnollab-r-e-wedding';
+const COUNTAPI_KEY = 'yes-count';
 
-async function getYesCountFile(){
+async function getYesCount(){
   try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}?ref=${GITHUB_BRANCH}`, {
-      headers: { 'Authorization': `Bearer ${GITHUB_TOKEN}`, 'Accept': 'application/vnd.github+json' }
-    });
-    if (!res.ok) throw new Error('GitHub get failed: ' + res.status);
+    const res = await fetch(`https://api.countapi.xyz/get/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
+    if (!res.ok) throw new Error('count fetch failed: ' + res.status);
     const data = await res.json();
-    const decoded = atob(data.content.replace(/\n/g, ''));
-    return { count: parseInt(decoded.trim(), 10) || 0, sha: data.sha };
+    return data.value || 0;
   } catch (err) {
-    console.error('GitHub get error:', err);
+    console.error('Count fetch error:', err);
     return null;
   }
 }
 
-async function saveYesCountFile(newCount, sha){
+async function hitYesCount(){
   try {
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_PATH}`, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${GITHUB_TOKEN}`,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: `RSVP yes count: ${newCount}`,
-        content: btoa(String(newCount)),
-        sha: sha,
-        branch: GITHUB_BRANCH
-      })
-    });
-    if (!res.ok) throw new Error('GitHub save failed: ' + res.status);
-    return true;
+    const res = await fetch(`https://api.countapi.xyz/hit/${COUNTAPI_NAMESPACE}/${COUNTAPI_KEY}`);
+    if (!res.ok) throw new Error('count hit failed: ' + res.status);
+    const data = await res.json();
+    return data.value || null;
   } catch (err) {
-    console.error('GitHub save error:', err);
-    return false;
+    console.error('Count hit error:', err);
+    return null;
   }
 }
 
 async function showLiveCount(){
   const el = document.getElementById('live-count');
-  const result = await getYesCountFile();
-  if (result && result.count > 0) {
-    el.textContent = result.count === 1 ? '💌 1 person has said yes so far' : `💌 ${result.count} people have said yes so far`;
+  const count = await getYesCount();
+  if (count) {
+    el.textContent = count === 1 ? '💌 1 person has said yes so far' : `💌 ${count} people have said yes so far`;
     el.style.opacity = '1';
   }
 }
@@ -313,14 +287,8 @@ async function celebrateYes(){
   reveal.classList.add('show');
 
   const countEl = document.getElementById('rsvp-count');
-  const current = await getYesCountFile();
-  if (current) {
-    const newCount = current.count + 1;
-    const saved = await saveYesCountFile(newCount, current.sha);
-    countEl.textContent = saved ? `You're guest #${newCount} to say yes! ✦` : 'More details to follow soon ✦';
-  } else {
-    countEl.textContent = 'More details to follow soon ✦';
-  }
+  const newCount = await hitYesCount();
+  countEl.textContent = newCount ? `You're guest #${newCount} to say yes! ✦` : 'More details to follow soon ✦';
 
   const duration = 6000;
   const end = Date.now() + duration;
